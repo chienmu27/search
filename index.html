@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="referrer" content="no-referrer">
+    <title>遺失物照片管理系統</title>
+
+    <style>
+        :root { --primary: #4285f4; --danger: #dc3545; --bg: #f8f9fa; --card: #fff; --text: #333; }
+        body { font-family: "Microsoft JhengHei", sans-serif; background: var(--bg); padding: 20px; color: var(--text); }
+
+        /* 載入遮罩 */
+        #loadingOverlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255,255,255,0.98); z-index: 9999;
+            display: flex; justify-content: center; align-items: center; flex-direction: column;
+            transition: opacity 0.3s;
+        }
+        .spinner { border: 4px solid #f3f3f3; border-top: 4px solid var(--primary); border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+
+        #errorMsg { color: var(--danger); margin-top: 15px; font-weight: bold; display: none; }
+        #forceCloseBtn { margin-top: 20px; padding: 8px 16px; background: #666; color: white; border: none; border-radius: 4px; cursor: pointer; display: none; }
+
+        /* 驗證彈窗 */
+        #modalOverlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5); z-index: 3000;
+            display: none; justify-content: center; align-items: center;
+        }
+        #modalBox {
+            background: #fff; padding: 25px; border-radius: 10px; width: 90%; max-width: 320px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2); text-align: center;
+        }
+        #modalTitle { margin-top: 0; color: var(--primary); }
+        #modalDesc { font-size: 0.9em; margin-bottom: 15px; color: #666; }
+        #pwdInput { width: 100%; padding: 10px; margin-bottom: 20px; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; }
+        .modal-btns { display: flex; gap: 10px; }
+        .modal-btns button { flex: 1; padding: 10px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        #btnConfirm { background: var(--primary); color: #fff; }
+        #btnCancel { background: #eee; color: #333; }
+
+        /* 介面樣式 */
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .refresh-btn { background: none; border: 1px solid #ddd; padding: 5px 10px; cursor: pointer; border-radius: 4px; font-size: 0.8em; }
+        .refresh-btn:hover { background: #eee; }
+
+        .upload-box { background: var(--card); padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; align-items: center; }
+
+        input[type="file"] { padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
+        input[type="text"] { padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
+        button.action-btn { background: var(--primary); color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; }
+        button.action-btn:hover { opacity: 0.9; }
+
+        .filters { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 10px; margin-bottom: 10px; }
+        .filter-btn { background: #fff; border: 1px solid #ddd; padding: 5px 15px; border-radius: 20px; cursor: pointer; white-space: nowrap; }
+        .filter-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
+
+        .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 15px; }
+        .card { background: var(--card); border-radius: 8px; overflow: hidden; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display: flex; flex-direction: column; }
+        .img-wrap { height: 150px; background: #eee; overflow: hidden; }
+        .img-wrap img { width: 100%; height: 100%; object-fit: cover; transition: 0.3s; }
+        .img-wrap img:hover { transform: scale(1.05); }
+        .info { padding: 10px; }
+        .name { font-weight: bold; font-size: 0.9em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 5px; }
+        .meta { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }
+        .cat-tag { font-size: 0.75em; background: #f0f0f0; padding: 2px 6px; border-radius: 4px; color: #555; }
+        .btn-del { background: #fff0f0; color: var(--danger); border: 1px solid #ffcccc; padding: 4px 10px; border-radius: 4px; font-size: 0.8em; cursor: pointer; }
+        .btn-del:hover { background: var(--danger); color: white; border-color: var(--danger); }
+    </style>
+</head>
+
+<body>
+
+<div id="loadingOverlay">
+    <div class="spinner" id="spinner"></div>
+    <div id="loadingText" style="margin-top:15px; color:#555;">系統初始化中...</div>
+    <div id="errorMsg"></div>
+    <button id="forceCloseBtn" onclick="forceHideLoading()">關閉視窗</button>
+</div>
+
+<div id="modalOverlay">
+    <div id="modalBox">
+        <h3 id="modalTitle">驗證</h3>
+        <p id="modalDesc">請輸入密碼以繼續</p>
+        <input type="password" id="pwdInput" placeholder="請輸入密碼">
+        <div class="modal-btns">
+            <button id="btnCancel">取消</button>
+            <button id="btnConfirm">確認</button>
+        </div>
+    </div>
+</div>
+
+<div class="container">
+    <div class="header">
+        <h3 style="margin:0;">📂 遺失物照片管理</h3>
+        <button class="refresh-btn" onclick="manualRefresh()">🔄 手動重新整理</button>
+    </div>
+
+    <div class="upload-box">
+        <input type="file" id="fileInput" accept="image/*" multiple>
+        <input type="text" id="catInput" list="catList" placeholder="輸入分類 (整批)">
+        <datalist id="catList"></datalist>
+        <button class="action-btn" onclick="prepareUpload()">批次上傳</button>
+    </div>
+
+    <div class="filters" id="filterBox"></div>
+    <div class="gallery" id="galleryBox"></div>
+</div>
+
+<script>
+    // ============================================
+    // 【請在此處填入您的 Apps Script 網址】
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbydZH-DPr010ezQAxKIFMZX3PPY6duJeo0lWP0-HTJup1sasKI2uFDyPu6ESj8jOGFH/exec";
+    // ============================================
+
+    let allPhotos = [];
+    let currentAction = null;
+    let targetId = null;
+    let isFetching = false;
+    let hasLoadedOnce = false;
+
+    // --- 1. 讀取照片 ---
+    function fetchPhotos() {
+        if (isFetching) return;
+        isFetching = true;
+
+        if (hasLoadedOnce) showLoading(true, "更新列表中...");
+
+        const timestamp = Date.now();
+
+        fetch(`${SCRIPT_URL}?v=${timestamp}`, {
+            method: "GET",
+            cache: "no-store"
+        })
+        .then(res => res.json())
+        .then(data => {
+            allPhotos = Array.isArray(data) ? data : [];
+            renderUI();
+            hasLoadedOnce = true;
+            showLoading(false);
+        })
+        .catch(err => {
+            console.error("讀取失敗:", err);
+
+            const txt = document.getElementById('loadingText');
+            if (txt) txt.innerText = "讀取失敗，請檢查網路或 SCRIPT_URL";
+
+            const btn = document.getElementById('forceCloseBtn');
+            if (btn) btn.style.display = 'block';
+
+            const spinner = document.getElementById('spinner');
+            if (spinner) spinner.style.display = 'none';
+
+            setTimeout(() => showLoading(false), 3500);
+        })
+        .finally(() => {
+            isFetching = false;
+        });
+    }
+
+    function manualRefresh() {
+        fetchPhotos();
+    }
+
+    // --- 2. 準備上傳 ---
+    function prepareUpload() {
+        const files = document.getElementById('fileInput').files;
+        if (files.length === 0) { alert("請至少選擇一張照片"); return; }
+
+        for (let i = 0; i < files.length; i++) {
+            if (files[i].size > 5 * 1024 * 1024) {
+                alert(`檔案 "${files[i].name}" 過大 (>5MB)，請移除後再試`);
+                return;
+            }
+        }
+        openModal('upload', null, "批次上傳驗證", `共選擇 ${files.length} 張照片，請輸入密碼：`);
+    }
+
+    // --- 3. 準備刪除 ---
+    window.prepareDelete = function(id) {
+        if (!id) { alert("錯誤：ID 無效"); return; }
+        openModal('delete', id, "確認刪除照片", "刪除後將移至雲端垃圾桶，請輸入密碼：");
+    };
+
+    // --- 彈窗邏輯 ---
+    const modal = document.getElementById('modalOverlay');
+    const pwdInput = document.getElementById('pwdInput');
+    const modalTitle = document.getElementById('modalTitle');
+    const modalDesc = document.getElementById('modalDesc');
+
+    function openModal(action, id, title, desc) {
+        currentAction = action;
+        targetId = id;
+        modalTitle.innerText = title;
+        modalDesc.innerText = desc || "請輸入密碼：";
+        pwdInput.value = "";
+        modal.style.display = 'flex';
+        setTimeout(() => pwdInput.focus(), 50);
+    }
+
+    document.getElementById('btnCancel').onclick = () => modal.style.display = 'none';
+
+    document.getElementById('btnConfirm').onclick = () => {
+        const pwd = pwdInput.value;
+        if (!pwd) { alert("請輸入密碼"); return; }
+        modal.style.display = 'none';
+
+        if (currentAction === 'upload') doBatchUpload(pwd);
+        if (currentAction === 'delete') doDelete(pwd);
+    };
+
+    // Enter 直接確認
+    pwdInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") document.getElementById('btnConfirm').click();
+    });
+
+    // --- 批次上傳 ---
+    async function doBatchUpload(password) {
+        const files = document.getElementById('fileInput').files;
+        const category = document.getElementById('catInput').value.trim() || "未分類";
+        const total = files.length;
+        let successCount = 0;
+        let failCount = 0;
+
+        showLoading(true, "準備開始上傳...");
+
+        for (let i = 0; i < total; i++) {
+            const file = files[i];
+            const txt = document.getElementById('loadingText');
+            if (txt) txt.innerText = `正在上傳 (${i + 1} / ${total}): ${file.name}`;
+
+            try {
+                const base64Data = await readFileAsBase64(file);
+                const result = await uploadSingleFile(base64Data, file.name, file.type, category, password);
+
+                if (result && result.status === 'success') {
+                    successCount++;
+                } else {
+                    failCount++;
+                }
+            } catch (err) {
+                console.error(err);
+                failCount++;
+            }
+        }
+
+        showLoading(false);
+        alert(`處理完成。\n成功: ${successCount} 張\n失敗: ${failCount} 張`);
+
+        if (successCount > 0) {
+            document.getElementById('fileInput').value = "";
+            document.getElementById('catInput').value = "";
+            fetchPhotos();
+        }
+    }
+
+    function readFileAsBase64(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve(e.target.result);
+            reader.onerror = (e) => reject(e);
+            reader.readAsDataURL(file);
+        });
+    }
+
+    function uploadSingleFile(base64Data, filename, mimeType, category, password) {
+        return fetch(SCRIPT_URL, {
+            method: 'POST',
+            cache: "no-store",
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
+            body: JSON.stringify({
+                action: 'upload',
+                password: password,
+                file: base64Data,
+                filename: filename,
+                mimeType: mimeType,
+                category: category
+            })
+        }).then(res => res.json());
+    }
+
+    // --- 刪除 ---
+    function doDelete(password) {
+        showLoading(true, "刪除中...");
+
+        fetch(SCRIPT_URL, {
+            method: 'POST',
+            cache: "no-store",
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
+            body: JSON.stringify({
+                action: 'delete',
+                password: password,
+                id: String(targetId)
+            })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data && data.status === 'success') {
+                alert("刪除成功！");
+                allPhotos = allPhotos.filter(p => String(p.id) !== String(targetId));
+                renderUI();
+                showLoading(false);
+            } else {
+                alert("刪除失敗: " + (data?.message || "未知錯誤"));
+                showLoading(false);
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            alert("連線錯誤");
+            showLoading(false);
+        });
+    }
+
+    // --- 渲染 UI ---
+    function renderUI() {
+        const catBox = document.getElementById('filterBox');
+        const galleryBox = document.getElementById('galleryBox');
+
+        if (!allPhotos || allPhotos.length === 0) {
+            catBox.innerHTML = '';
+            galleryBox.innerHTML = '<p style="grid-column:1/-1; text-align:center; color:#999;">沒有照片 (請上傳)</p>';
+            return;
+        }
+
+        const cats = ['全部', ...new Set(allPhotos.map(p => p.category || "未分類"))];
+        const activeCat = document.querySelector('.filter-btn.active')?.innerText || '全部';
+
+        catBox.innerHTML = cats.map(c =>
+            `<button class="filter-btn ${c === activeCat ? 'active' : ''}"
+             onclick="changeFilter('${escapeHtml(c)}', this)">${escapeHtml(c)}</button>`
+        ).join('');
+
+        renderGallery(activeCat);
+
+        document.getElementById('catList').innerHTML = cats
+            .filter(c => c !== '全部')
+            .map(c => `<option value="${escapeHtml(c)}">`)
+            .join('');
+    }
+
+    window.changeFilter = function(cat, btn) {
+        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        renderGallery(cat);
+    };
+
+    function renderGallery(filter) {
+        const box = document.getElementById('galleryBox');
+        const list = filter === '全部'
+            ? allPhotos
+            : allPhotos.filter(p => (p.category || "未分類") === filter);
+
+        if (list.length === 0) {
+            box.innerHTML = '<p style="grid-column:1/-1; text-align:center; color:#999;">無此分類照片</p>';
+            return;
+        }
+
+        box.innerHTML = list.map(p => `
+            <div class="card">
+                <div class="img-wrap">
+                    <img src="${p.url}" alt="${escapeHtml(p.name || '')}" loading="lazy"
+                     onerror="this.src='https://via.placeholder.com/200x150?text=Error'">
+                </div>
+                <div class="info">
+                    <div class="name" title="${escapeHtml(p.name || '')}">${escapeHtml(p.name || '')}</div>
+                    <div class="meta">
+                        <span class="cat-tag">${escapeHtml(p.category || "未分類")}</span>
+                        <button class="btn-del" onclick="prepareDelete('${String(p.id)}')">刪除</button>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    // --- Loading ---
+    function showLoading(show, text) {
+        const el = document.getElementById('loadingOverlay');
+        const txt = document.getElementById('loadingText');
+        const spinner = document.getElementById('spinner');
+        const btn = document.getElementById('forceCloseBtn');
+        const err = document.getElementById('errorMsg');
+
+        if (show) {
+            el.style.display = 'flex';
+            el.style.opacity = '1';
+            if (text) txt.innerText = text;
+
+            spinner.style.display = 'block';
+            btn.style.display = 'none';
+            err.style.display = 'none';
+
+            setTimeout(() => {
+                if (el.style.display === 'flex') {
+                    btn.style.display = 'block';
+                    if (txt.innerText.includes("初始化")) txt.innerText = "連線時間較長...";
+                }
+            }, 15000);
+
+        } else {
+            el.style.opacity = '0';
+            setTimeout(() => {
+                if (el.style.opacity === '0') el.style.display = 'none';
+            }, 300);
+        }
+    }
+
+    window.forceHideLoading = function() {
+        document.getElementById('loadingOverlay').style.display = 'none';
+    };
+
+    // --- 防 XSS (分類/名稱有特殊字元時更安全) ---
+    function escapeHtml(str) {
+        return String(str)
+            .replaceAll("&", "&amp;")
+            .replaceAll("<", "&lt;")
+            .replaceAll(">", "&gt;")
+            .replaceAll('"', "&quot;")
+            .replaceAll("'", "&#039;");
+    }
+
+    // =========================================================
+    // 【強制自動執行】
+    // =========================================================
+    function initApp() {
+        if (!SCRIPT_URL || SCRIPT_URL.length < 20) {
+            const txt = document.getElementById('loadingText');
+            if (txt) txt.innerText = "錯誤：SCRIPT_URL 網址似乎不正確";
+            document.getElementById('spinner').style.display = 'none';
+            document.getElementById('forceCloseBtn').style.display = 'block';
+            return;
+        }
+        fetchPhotos();
+    }
+
+    initApp();
+
+    // GitHub Pages 有時候 load 事件較晚，保險再補一次
+    window.addEventListener('load', () => {
+        if (!hasLoadedOnce && !isFetching) initApp();
+    });
+
+    setTimeout(() => {
+        if (!hasLoadedOnce && !isFetching) initApp();
+    }, 2000);
+</script>
+
+</body>
+</html>
