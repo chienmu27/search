@@ -1,280 +1,516 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>2026 馬到成功-教學組系統</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="referrer" content="no-referrer">
+    <title>遺失物照片管理系統 (自動編號版)</title>
 
-<style>
-body{
-  margin:0;
-  font-family:"Microsoft JhengHei",sans-serif;
-  background: linear-gradient(135deg,#7a0000,#b8860b,#7a0000);
-  background-size:400% 400%;
-  animation:bgMove 12s ease infinite;
-  color:white;
-  text-align:center;
-  overflow-x:hidden;
-}
+    <style>
+        :root { --primary: #4285f4; --danger: #dc3545; --bg: #f8f9fa; --card: #fff; --text: #333; }
+        body { font-family: "Microsoft JhengHei", sans-serif; background: var(--bg); padding: 20px; color: var(--text); }
 
-@keyframes bgMove{
-  0%{background-position:0% 50%;}
-  50%{background-position:100% 50%;}
-  100%{background-position:0% 50%;}
-}
+        #loadingOverlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255,255,255,0.98); z-index: 9999;
+            display: flex; justify-content: center; align-items: center; flex-direction: column;
+            transition: opacity 0.3s;
+        }
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid var(--primary);
+            border-radius: 50%;
+            width: 40px; height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
 
-/* 奔馬動畫 */
-.horse{
-  position:fixed;
-  bottom:20px;
-  left:-200px;
-  font-size:60px;
-  animation:runHorse 15s linear infinite;
-}
+        #errorMsg { color: var(--danger); margin-top: 15px; font-weight: bold; display: none; }
+        #forceCloseBtn {
+            margin-top: 20px; padding: 8px 16px; background: #666; color: white;
+            border: none; border-radius: 4px; cursor: pointer; display: none;
+        }
 
-@keyframes runHorse{
-  0%{left:-200px;}
-  100%{left:110%;}
-}
+        #modalOverlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5); z-index: 3000;
+            display: none; justify-content: center; align-items: center;
+        }
+        #modalBox {
+            background: #fff; padding: 25px; border-radius: 10px; width: 90%; max-width: 320px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2); text-align: center;
+        }
+        #modalTitle { margin-top: 0; color: var(--primary); }
+        #modalDesc { font-size: 0.9em; margin-bottom: 15px; color: #666; }
+        #pwdInput {
+            width: 100%; padding: 10px; margin-bottom: 20px;
+            border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box;
+        }
+        .modal-btns { display: flex; gap: 10px; }
+        .modal-btns button {
+            flex: 1; padding: 10px; border: none; border-radius: 5px;
+            cursor: pointer; font-weight: bold;
+        }
+        #btnConfirm { background: var(--primary); color: #fff; }
+        #btnCancel { background: #eee; color: #333; }
 
-h2{
-  font-size:30px;
-  margin-top:30px;
-  text-shadow:0 0 15px gold;
-}
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .refresh-btn {
+            background: none; border: 1px solid #ddd; padding: 5px 10px;
+            cursor: pointer; border-radius: 4px; font-size: 0.8em;
+        }
+        .refresh-btn:hover { background: #eee; }
 
-/* 主按鈕 */
-.link-list,.class-group{
-  display:flex;
-  flex-wrap:wrap;
-  justify-content:center;
-  gap:15px;
-  margin-top:25px;
-}
+        .upload-box {
+            background: var(--card); padding: 20px; border-radius: 10px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            display: flex; gap: 10px; flex-wrap: wrap;
+            margin-bottom: 20px; align-items: center;
+        }
+        input[type="file"], input[type="text"] { padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
+        button.action-btn { background: var(--primary); color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; }
+        button.action-btn:hover { opacity: 0.9; }
 
-.btn-link{
-  padding:12px 20px;
-  background:rgba(255,255,255,0.95);
-  color:#8b0000;
-  border-radius:8px;
-  font-weight:bold;
-  cursor:pointer;
-  transition:0.3s;
-  min-width:90px;
-  box-shadow:0 0 12px rgba(255,215,0,0.6);
-}
+        .filters { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 10px; margin-bottom: 10px; }
+        .filter-btn { background: #fff; border: 1px solid #ddd; padding: 5px 15px; border-radius: 20px; cursor: pointer; white-space: nowrap; }
+        .filter-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
 
-.btn-link:hover{
-  background:gold;
-  color:#7a0000;
-  transform:scale(1.08);
-}
-
-.grade-title{
-  margin-top:35px;
-  font-size:20px;
-  color:gold;
-  text-shadow:0 0 8px #fff;
-}
-
-/* 登入視窗 */
-#login-overlay{
-  display:none;
-  position:fixed;
-  top:0;left:0;
-  width:100%;height:100%;
-  background:rgba(0,0,0,0.7);
-  justify-content:center;
-  align-items:center;
-  z-index:999;
-}
-
-#login-box{
-  background:white;
-  color:black;
-  padding:25px;
-  border-radius:12px;
-  width:300px;
-  box-shadow:0 0 20px gold;
-}
-
-input{
-  width:90%;
-  padding:10px;
-  margin:8px 0;
-  border-radius:5px;
-  border:1px solid #ccc;
-}
-
-.btn-submit{
-  width:100%;
-  padding:10px;
-  background:#8b0000;
-  color:white;
-  border:none;
-  border-radius:5px;
-  cursor:pointer;
-}
-
-.btn-submit:hover{
-  background:gold;
-  color:#7a0000;
-}
-
-.btn-cancel{
-  margin-top:8px;
-  cursor:pointer;
-  font-size:14px;
-}
-
-#msg{color:red;height:18px;}
-.loading{display:none;color:#8b0000;}
-
-.hidden{display:none;}
-</style>
+        .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 15px; }
+        .card {
+            background: var(--card); border-radius: 8px; overflow: hidden;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            display: flex; flex-direction: column;
+        }
+        .img-wrap { height: 150px; background: #eee; overflow: hidden; }
+        .img-wrap img { width: 100%; height: 100%; object-fit: cover; transition: 0.3s; }
+        .img-wrap img:hover { transform: scale(1.05); }
+        .info { padding: 10px; }
+        .name { font-weight: bold; font-size: 0.9em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 5px; }
+        .meta { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }
+        .cat-tag { font-size: 0.75em; background: #f0f0f0; padding: 2px 6px; border-radius: 4px; color: #555; }
+        .btn-del {
+            background: #fff0f0; color: var(--danger);
+            border: 1px solid #ffcccc; padding: 4px 10px;
+            border-radius: 4px; font-size: 0.8em; cursor: pointer;
+        }
+        .btn-del:hover { background: var(--danger); color: #fff; border-color: var(--danger); }
+    </style>
 </head>
 
 <body>
 
-<div class="horse">🐎🐎🐎</div>
-
-<h2>🎉 2026 馬年特別版生教系統 🎉</h2>
-
-<!-- 主頁 -->
-<div class="link-list" id="main-links">
-  <div class="btn-link" onclick="openLogin('https://docs.google.com/spreadsheets/d/1HA14Y11V4vpkQ8g7W3ecV6VyKJaxWzDD4Nah4z8IJOs/edit?usp=drive_link','admin')">資料清除</div>
-  <div class="btn-link" onclick="openLogin('https://docs.google.com/spreadsheets/d/1DuMqFM4zSgPh6ZMOgpp36ra1Ya_slmgmp3x6VrmUNiQ/edit?usp=drive_link','admin')">填報設定</div>
-  <div class="btn-link" onclick="showClassPage()">成績填報</div>
+<div id="loadingOverlay">
+    <div class="spinner" id="spinner"></div>
+    <div id="loadingText" style="margin-top:15px; color:#555;">系統初始化中...</div>
+    <div id="errorMsg"></div>
+    <button id="forceCloseBtn" onclick="forceHideLoading()">關閉視窗</button>
 </div>
 
-<!-- 班級頁 -->
-<div id="class-page" class="hidden">
-  <h3 style="margin-top:20px;">🏇 各年級班級填報</h3>
-  <div id="class-container"></div>
-  <div style="margin-top:30px;">
-    <div class="btn-link" onclick="backToMain()">返回主頁</div>
-  </div>
+<div id="modalOverlay">
+    <div id="modalBox">
+        <h3 id="modalTitle">驗證</h3>
+        <p id="modalDesc">請輸入密碼以繼續</p>
+        <input type="password" id="pwdInput" placeholder="請輸入密碼">
+        <div class="modal-btns">
+            <button id="btnCancel">取消</button>
+            <button id="btnConfirm">確認</button>
+        </div>
+    </div>
 </div>
 
-<!-- 登入 -->
-<div id="login-overlay">
-  <div id="login-box">
-    <h3>馬年身份驗證</h3>
-    <input type="text" id="acc" placeholder="輸入帳號">
-    <input type="password" id="pwd" placeholder="輸入密碼">
-    <div id="msg"></div>
-    <div id="loader" class="loading">奔馬驗證中...</div>
-    <button class="btn-submit" onclick="doVerify()">登入</button>
-    <div class="btn-cancel" onclick="closeLogin()">取消</div>
-  </div>
+<div class="container">
+    <div class="header">
+        <h3 style="margin:0;">📂 遺失物照片管理</h3>
+        <button class="refresh-btn" onclick="fetchPhotos()">🔄 手動重新整理</button>
+    </div>
+
+    <div class="upload-box">
+        <input type="file" id="fileInput" accept="image/*" multiple>
+        <input type="text" id="catInput" list="catList" placeholder="輸入分類 (整批)">
+        <datalist id="catList"></datalist>
+        <button class="action-btn" onclick="prepareUpload()">批次上傳</button>
+    </div>
+
+    <div class="filters" id="filterBox"></div>
+    <div class="gallery" id="galleryBox"></div>
 </div>
 
 <script>
-const GAS_URL="https://script.google.com/macros/s/AKfycbxQQhwneU7Y91bClv5rqwGpjvnuIxeluyfP5SeY1XLxIy8KlAJ2XfKA66MEV6nzj5lq/exec";
-let currentUrl="",target="";
+    // ============================================
+    // 【請在此處填入您的 Apps Script 網址】
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxx0t3Pz5DKYrPztCw07T8akmMzCcBZ9Dlzx-a5L9EmZS181SWgKzm-Wclz7Wg5cndDnA/exec";
+    // ============================================
 
-const classes=[
-{grade:1,name:"101",url:"https://docs.google.com/spreadsheets/d/143KUbl7g-Z-TLYFV2ucrA-aeQPjqJrh1WD0xru2rAzI/edit"},
-{grade:1,name:"102",url:"https://docs.google.com/spreadsheets/d/1tq1Q_B3DvFVG739efFqt30Vq26KIJwMOfjzS6FeN2g/edit"},
-{grade:1,name:"103",url:"https://docs.google.com/spreadsheets/d/1J63gH6QhX0cTC8XhvRWg6f030Vw0o4JImFvQKeUSVbY/edit"},
-{grade:1,name:"104",url:"https://docs.google.com/spreadsheets/d/1cu-2XM90mrHSCK_gEnAeU8k7b61u-h3lDSkG86X9pi4/edit"},
-{grade:2,name:"201",url:"#"},
-{grade:2,name:"202",url:"#"},
-{grade:2,name:"203",url:"#"},
-{grade:2,name:"204",url:"#"},
-{grade:3,name:"301",url:"#"},
-{grade:3,name:"302",url:"#"},
-{grade:3,name:"303",url:"#"},
-{grade:3,name:"304",url:"#"},
-{grade:4,name:"401",url:"#"},
-{grade:4,name:"402",url:"#"},
-{grade:4,name:"403",url:"#"},
-{grade:4,name:"404",url:"#"},
-{grade:5,name:"501",url:"#"},
-{grade:5,name:"502",url:"#"},
-{grade:5,name:"503",url:"#"},
-{grade:5,name:"504",url:"#"},
-{grade:6,name:"601",url:"#"},
-{grade:6,name:"602",url:"#"},
-{grade:6,name:"603",url:"#"},
-{grade:6,name:"604",url:"#"}
-];
+    let allPhotos = [];
+    let currentAction = null;
+    let targetId = null;
+    let isFetching = false;
+    let hasLoadedOnce = false;
 
-const container=document.getElementById("class-container");
+    // -----------------------------
+    // 1. 讀取列表
+    // -----------------------------
+    function fetchPhotos() {
+        if (isFetching) return;
+        isFetching = true;
 
-for(let g=1;g<=6;g++){
-  const title=document.createElement("div");
-  title.className="grade-title";
-  title.innerText=`${g}年級`;
-  container.appendChild(title);
+        if (hasLoadedOnce) showLoading(true, "更新列表中...");
 
-  const group=document.createElement("div");
-  group.className="class-group";
+        const timestamp = Date.now();
 
-  classes.filter(c=>c.grade===g).forEach(c=>{
-    const btn=document.createElement("div");
-    btn.className="btn-link";
-    btn.innerText=c.name;
-    btn.onclick=()=>openLogin(c.url,"class");
-    group.appendChild(btn);
-  });
+        fetch(`${SCRIPT_URL}?v=${timestamp}`, {
+            method: "GET",
+            cache: "no-store"
+        })
+        .then(res => res.json())
+        .then(data => {
+            allPhotos = Array.isArray(data) ? data : [];
+            renderUI();
+            hasLoadedOnce = true;
+            showLoading(false);
+        })
+        .catch(err => {
+            console.error(err);
+            const txt = document.getElementById('loadingText');
+            const spinner = document.getElementById('spinner');
+            const btn = document.getElementById('forceCloseBtn');
 
-  container.appendChild(group);
-}
+            if (txt) txt.innerText = "讀取失敗，請檢查網路或 SCRIPT_URL";
+            if (spinner) spinner.style.display = "none";
+            if (btn) btn.style.display = "block";
 
-function showClassPage(){
-  document.getElementById('main-links').classList.add('hidden');
-  document.getElementById('class-page').classList.remove('hidden');
-}
-
-function backToMain(){
-  document.getElementById('class-page').classList.add('hidden');
-  document.getElementById('main-links').classList.remove('hidden');
-}
-
-function openLogin(url,t){
-  currentUrl=url;
-  target=t;
-  document.getElementById('login-overlay').style.display='flex';
-  document.getElementById('acc').value="";
-  document.getElementById('pwd').value="";
-  document.getElementById('msg').innerText="";
-}
-
-function closeLogin(){
-  document.getElementById('login-overlay').style.display='none';
-}
-
-async function doVerify(){
-  const user=document.getElementById('acc').value;
-  const pass=document.getElementById('pwd').value;
-  const msg=document.getElementById('msg');
-  const loader=document.getElementById('loader');
-
-  if(!user||!pass){
-    msg.innerText="請完整輸入帳號密碼";
-    return;
-  }
-
-  msg.innerText="";
-  loader.style.display="block";
-
-  try{
-    const response=await fetch(`${GAS_URL}?user=${encodeURIComponent(user)}&pass=${encodeURIComponent(pass)}&target=${encodeURIComponent(target)}`);
-    const data=await response.json();
-    loader.style.display="none";
-
-    if(data.ok===true){
-      window.open(currentUrl,'_blank');
-      closeLogin();
-    }else{
-      msg.innerText=data.msg?data.msg:"帳號或密碼錯誤";
+            setTimeout(() => showLoading(false), 3500);
+        })
+        .finally(() => {
+            isFetching = false;
+        });
     }
-  }catch(e){
-    loader.style.display="none";
-    msg.innerText="連線發生錯誤";
-  }
-}
+
+    // -----------------------------
+    // 2. 準備上傳
+    // -----------------------------
+    function prepareUpload() {
+        const files = document.getElementById('fileInput').files;
+        if (files.length === 0) { alert("請至少選擇一張照片"); return; }
+
+        // 檢查大小 (30MB)
+        for (let i = 0; i < files.length; i++) {
+            if (files[i].size > 30 * 1024 * 1024) {
+                alert(`檔案 "${files[i].name}" 過大 (>30MB)，請移除`);
+                return;
+            }
+        }
+        openModal('upload', null, "批次上傳驗證", `共 ${files.length} 張，請輸入密碼：`);
+    }
+
+    // -----------------------------
+    // 3. 準備刪除
+    // -----------------------------
+    window.prepareDelete = function(id) {
+        if (!id) return;
+        openModal('delete', id, "確認刪除照片", "刪除後將移至垃圾桶，請輸入密碼：");
+    };
+
+    // -----------------------------
+    // 彈窗
+    // -----------------------------
+    const modal = document.getElementById('modalOverlay');
+    const pwdInput = document.getElementById('pwdInput');
+    const modalTitle = document.getElementById('modalTitle');
+    const modalDesc = document.getElementById('modalDesc');
+
+    function openModal(action, id, title, desc) {
+        currentAction = action;
+        targetId = id;
+        modalTitle.innerText = title;
+        modalDesc.innerText = desc || "請輸入密碼：";
+        pwdInput.value = "";
+        modal.style.display = 'flex';
+        setTimeout(() => pwdInput.focus(), 50);
+    }
+
+    document.getElementById('btnCancel').onclick = () => modal.style.display = 'none';
+
+    document.getElementById('btnConfirm').onclick = () => {
+        const pwd = pwdInput.value;
+        if (!pwd) { alert("請輸入密碼"); return; }
+        modal.style.display = 'none';
+
+        if (currentAction === 'upload') doBatchUpload(pwd);
+        if (currentAction === 'delete') doDelete(pwd);
+    };
+
+    // Enter 直接確認
+    pwdInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") document.getElementById("btnConfirm").click();
+    });
+
+    // -----------------------------
+    // 批次上傳 (分片上傳)
+    // -----------------------------
+    async function doBatchUpload(password) {
+        const files = document.getElementById('fileInput').files;
+        const category = document.getElementById('catInput').value.trim() || "未分類";
+        let success = 0, fail = 0;
+
+        showLoading(true, "準備上傳...");
+
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            const uniqueId = Date.now().toString() + "_" + i;
+
+            try {
+                const fullBase64 = await readFileAsBase64(file);
+                const cleanBase64 = fullBase64.split(',')[1];
+
+                // 分片 (1.5MB)
+                const CHUNK_SIZE = 1.5 * 1024 * 1024;
+                const totalChunks = Math.ceil(cleanBase64.length / CHUNK_SIZE);
+                let finalName = "";
+
+                for (let j = 0; j < totalChunks; j++) {
+                    const chunk = cleanBase64.slice(j * CHUNK_SIZE, (j + 1) * CHUNK_SIZE);
+                    const pct = Math.round(((j + 1) / totalChunks) * 100);
+
+                    const txt = document.getElementById('loadingText');
+                    if (txt) {
+                        txt.innerText = `正在上傳 (${i + 1}/${files.length}): ${file.name} (${pct}%)`;
+                    }
+
+                    const result = await sendChunk({
+                        action: 'upload_chunk',
+                        password: password,
+                        fileId: uniqueId,
+                        chunk: chunk,
+                        index: j,
+                        total: totalChunks,
+                        filename: file.name,
+                        mimeType: file.type,
+                        category: category
+                    });
+
+                    if (!result || result.status === 'error') {
+                        throw new Error(result?.message || "上傳失敗");
+                    }
+
+                    // 最後一片會回傳新檔名
+                    if (result.name) finalName = result.name;
+                }
+
+                console.log(`上傳成功: ${file.name} -> ${finalName}`);
+                success++;
+            } catch (err) {
+                console.error(err);
+                fail++;
+            }
+        }
+
+        showLoading(false);
+        alert(`完成。\n成功: ${success}\n失敗: ${fail}`);
+
+        if (success > 0) {
+            document.getElementById('fileInput').value = "";
+            fetchPhotos();
+        }
+    }
+
+    function sendChunk(payload) {
+        return fetch(SCRIPT_URL, {
+            method: 'POST',
+            cache: "no-store",
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
+            body: JSON.stringify(payload)
+        }).then(res => res.json());
+    }
+
+    function readFileAsBase64(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve(e.target.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
+    }
+
+    // -----------------------------
+    // 刪除
+    // -----------------------------
+    function doDelete(password) {
+        showLoading(true, "刪除中...");
+
+        fetch(SCRIPT_URL, {
+            method: 'POST',
+            cache: "no-store",
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
+            body: JSON.stringify({
+                action: 'delete',
+                password: password,
+                id: String(targetId)
+            })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data && data.status === 'success') {
+                alert("刪除成功");
+
+                // 修正：避免 id 型別不一致造成刪不掉
+                allPhotos = allPhotos.filter(p => String(p.id) !== String(targetId));
+
+                renderUI();
+            } else {
+                alert("失敗: " + (data?.message || "未知錯誤"));
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            alert("連線錯誤");
+        })
+        .finally(() => showLoading(false));
+    }
+
+    // -----------------------------
+    // 渲染 UI
+    // -----------------------------
+    function renderUI() {
+        const catBox = document.getElementById('filterBox');
+        const galleryBox = document.getElementById('galleryBox');
+
+        if (!allPhotos || allPhotos.length === 0) {
+            catBox.innerHTML = '';
+            galleryBox.innerHTML = '<p style="text-align:center;color:#999;grid-column:1/-1">沒有照片</p>';
+            return;
+        }
+
+        const cats = ['全部', ...new Set(allPhotos.map(p => p.category || "未分類"))];
+        const activeCat = document.querySelector('.filter-btn.active')?.innerText || '全部';
+
+        catBox.innerHTML = cats.map(c => `
+            <button class="filter-btn ${c === activeCat ? 'active' : ''}"
+                onclick="changeFilter('${escapeJsString(c)}', this)">
+                ${escapeHtml(c)}
+            </button>
+        `).join('');
+
+        renderGallery(activeCat);
+
+        // datalist 不放「全部」比較合理
+        document.getElementById('catList').innerHTML = cats
+            .filter(c => c !== "全部")
+            .map(c => `<option value="${escapeHtml(c)}">`)
+            .join('');
+    }
+
+    window.changeFilter = function(cat, btn) {
+        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        renderGallery(cat);
+    };
+
+    function renderGallery(filter) {
+        const box = document.getElementById('galleryBox');
+        const list = (filter === '全部')
+            ? allPhotos
+            : allPhotos.filter(p => (p.category || "未分類") === filter);
+
+        if (list.length === 0) {
+            box.innerHTML = '<p style="text-align:center;color:#999;grid-column:1/-1">無此分類照片</p>';
+            return;
+        }
+
+        box.innerHTML = list.map(p => `
+            <div class="card">
+                <div class="img-wrap">
+                    <img src="${p.url}"
+                         alt="${escapeHtml(p.name || '')}"
+                         loading="lazy"
+                         onerror="this.src='https://via.placeholder.com/200?text=Error'">
+                </div>
+                <div class="info">
+                    <div class="name" title="${escapeHtml(p.name || '')}">
+                        ${escapeHtml(p.name || '')}
+                    </div>
+                    <div class="meta">
+                        <span class="cat-tag">${escapeHtml(p.category || '未分類')}</span>
+                        <button class="btn-del" onclick="prepareDelete('${String(p.id)}')">刪除</button>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    // -----------------------------
+    // Loading
+    // -----------------------------
+    function showLoading(show, text) {
+        const el = document.getElementById('loadingOverlay');
+        const txt = document.getElementById('loadingText');
+        const btn = document.getElementById('forceCloseBtn');
+        const spinner = document.getElementById('spinner');
+
+        if (show) {
+            el.style.display = 'flex';
+            el.style.opacity = '1';
+
+            if (text) txt.innerText = text;
+            btn.style.display = 'none';
+            spinner.style.display = 'block';
+
+            setTimeout(() => {
+                if (el.style.display === 'flex') btn.style.display = 'block';
+            }, 15000);
+
+        } else {
+            el.style.opacity = '0';
+            setTimeout(() => {
+                if (el.style.opacity === '0') el.style.display = 'none';
+            }, 300);
+        }
+    }
+
+    window.forceHideLoading = () => {
+        document.getElementById('loadingOverlay').style.display = 'none';
+    };
+
+    // -----------------------------
+    // 安全處理
+    // -----------------------------
+    function escapeHtml(str) {
+        return String(str)
+            .replaceAll("&", "&amp;")
+            .replaceAll("<", "&lt;")
+            .replaceAll(">", "&gt;")
+            .replaceAll('"', "&quot;")
+            .replaceAll("'", "&#039;");
+    }
+
+    // 避免分類名稱含 ' 造成 onclick 壞掉
+    function escapeJsString(str) {
+        return String(str).replaceAll("\\", "\\\\").replaceAll("'", "\\'");
+    }
+
+    // -----------------------------
+    // 初始化
+    // -----------------------------
+    function initApp() {
+        if (!SCRIPT_URL || SCRIPT_URL.length < 20) {
+            document.getElementById('loadingText').innerText = "錯誤：SCRIPT_URL 網址無效";
+            document.getElementById('spinner').style.display = 'none';
+            document.getElementById('forceCloseBtn').style.display = 'block';
+            return;
+        }
+        fetchPhotos();
+    }
+
+    initApp();
+
+    window.addEventListener('load', () => {
+        if (!hasLoadedOnce && !isFetching) initApp();
+    });
+
+    setTimeout(() => {
+        if (!hasLoadedOnce && !isFetching) initApp();
+    }, 2000);
 </script>
+
 </body>
 </html>
